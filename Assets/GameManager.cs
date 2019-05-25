@@ -71,12 +71,16 @@ public class GameManager : MonoBehaviour
 		catch(System.Exception e)
 		{
 			Debug.Log("Error en open: " + e.Message);
-			Debug.Break();
-		}
+
+            //mostrar ventana de error
+            panelError.gameObject.SetActive(true);
+            panelError.Find("Text").GetComponent<Text>().text = "ERROR no se ha detectado el hardware. \n" + e.Message;
+
+        }
 		labelInfo.text = "inicialziando...";
 
 		//Leer desde tezto las propiedades de los voxels
-		ReadProperties();
+		//ReadPropertiesfromFile();
 	}
 
 	Transform GetVoxel(int x, int y, int z)
@@ -131,7 +135,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-	public void ReadProperties()
+	public void ReadPropertiesfromFile()
 	{
 
 		/*  modificando harcoded 
@@ -157,9 +161,7 @@ public class GameManager : MonoBehaviour
 		*/
 
 		TextAsset texto = Resources.Load<TextAsset>("mapa");
-
 		string[] lineas = texto.text.Split('\n');
-
 		for (int i = 0; i < lineas.Length; i++)
 		{
 			//dicidir cada linea e interpretar la coordenada
@@ -173,38 +175,86 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	public void Update()
-	{
-		//lectura de puerto serie
-		try
-		{
-			string value = stream.ReadLine();
+    public void ReadPropertiesFromPort()
+    {
+        //lectura de puerto serie
+        try
+        {
+            string value = stream.ReadLine();
 
-			//labelInfo.text = "Recibido : " + value;
-			//analizar el contenido del mensaje
-			string[] s = value.Split(' ');
-			if (s[0] == "Error" && s[1] == "20")
-			{
-				panelError.gameObject.SetActive(true);
-			}
-			else
-			{
-				//tarjeta correcta, leer los bytes
-				panelError.gameObject.SetActive(false);
-				if (s.Length < 16)
-				{
-					labelInfo.text = "error, menos de 16 bytes leidos";
-				}
-				else
-				{
+            //labelInfo.text = "Recibido : " + value;
+            Debug.Log("Recibido : " + value);
+            //analizar el contenido del mensaje
+            string[] s = value.Split(' ');
+            if (s[0] == "Error" && s[1] == "20")
+            {
+                panelError.gameObject.SetActive(true);
+                panelError.Find("Text").GetComponent<Text>().text = "ERROR tarjeta desconocida";
+            }
+            else
+            {
+                //tarjeta correcta, leer los bytes
+                panelError.gameObject.SetActive(false);
+                if (s.Length < 16)
+                {
+                    labelInfo.text = "error, menos de 16 bytes leidos";
+                }
+                else
+                {
+                    ushort maskX = 0xF0;
+                    ushort maskY = 0x0F;
+                    for( int i = 0; i< s.Length; i+=2)
+                    {
+                        //coordenada en X
+                        //parsear el string y convertirlo a WORD 
+                        char coordx = (char) System.Convert.ToUInt16(s[i], 16);
+                        //Debug.Log( (int)coordx);
+                        coordx = (char) (coordx & maskX);
+                        //Debug.Log((int) coordx);
+                        coordx = (char) (coordx >> 4) ;
 
-				}
-			}
-		}
-		catch(System.Exception e)
-		{
-			//labelInfo.text = e.Message;
-		}
+                        //coordenada en Y
+                        char coordy = (char)System.Convert.ToUInt16(s[i], 16);
+                        coordy = (char)(coordy & maskY);
+
+                        //coordenada en Z
+                        char coordz = (char)System.Convert.ToUInt16(s[i+1], 16);
+                        //Debug.Log( (int)coordx);
+                        coordz = (char)(coordz & maskX);
+                        //Debug.Log((int) coordx);
+                        coordz = (char)(coordz >> 4);
+
+                        //coordenada del color
+                        char coordcolor = (char)System.Convert.ToUInt16(s[i+1], 16);
+                        coordcolor = (char)(coordcolor & maskY);
+
+
+
+
+                        Debug.Log("Leido voxel : (" + (int)coordx + "," + (int)coordy +"," + (int)coordz +"," + GetColorPalette( (VoxelPalette)coordcolor)  );
+
+                        //Aplicar esa info a un voxel 
+
+                        Transform vox = GetVoxel((int)coordx, (int)coordy, (int)coordz);
+                        vox.GetComponent<MeshRenderer>().material.color = GetColorPalette((VoxelPalette)coordcolor);
+                        SetVoxel(vox, (int)coordx, (int)coordy, (int)coordz);
+
+                    }
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            //labelInfo.text = e.Message;
+        }
+    }
+
+    public void Update()
+    {
+        if (stream.IsOpen)
+        {
+            ReadPropertiesFromPort();
+        }
 		
 	}
 }
